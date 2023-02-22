@@ -57,7 +57,7 @@
         </v-card-actions>
         <v-card-actions>
             <v-spacer></v-spacer>
-            <v-btn
+            <v-btn  
                     v-if="!editMode"
                     color="deep-purple lighten-2"
                     text
@@ -111,6 +111,9 @@
             decreaseStockDiagram: false,
         }),
         computed:{
+            userRoles() {
+                return localStorage.getItem('user_client_roles');
+            } 
         },
         methods: {
             selectFile(){
