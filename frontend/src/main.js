@@ -4,6 +4,7 @@ import App from "./App.vue";
 import vuetify from "./plugins/vuetify";
 import Managing from "./components";
 import router from './router';
+import Keycloak from 'keycloak-js'
 Vue.config.productionTip = false;
 
 const axios = require("axios").default;
@@ -61,8 +62,89 @@ Vue.prototype.$ManagerLists.forEach(function(item, idx) {
   })
 })
 
-new Vue({
-  vuetify,
-  router,
-  render: h => h(App)
-}).$mount("#app");
+let initOptions = {
+  url: `http://localhost:9090/`,
+  realm: `master`,
+  clientId: `master`,
+  onLoad: `login-required`,
+};
+
+let keycloak = Keycloak(initOptions);
+
+init();
+
+function init() {
+  keycloak.init({
+    onLoad: initOptions.onLoad,
+  }).success(auth => {
+    const ONE_MINUTE = 60000;
+  
+    if (!auth) {
+      window.location.reload();
+    } else {
+      console.info(`Auth ok`);
+    }
+  
+    new Vue({
+      vuetify,
+      router,
+      render: h => h(App)
+    }).$mount("#app");
+
+    localStorage.setItem(`vue-token`, keycloak.token);
+    localStorage.setItem(`vue-refresh-token`, keycloak.refreshToken);
+    localStorage.setItem(`vue-idToken`, keycloak.idToken);
+    localStorage.setItem(`vue-idTokenParsed`, keycloak.idTokenParsed);
+
+    console.log(keycloak.subject);
+    if (keycloak.idToken) {
+        //document.location.href = "?user="+keycloak.idTokenParsed.preferred_username;
+        console.log('IDToken');
+        localStorage.setItem('preferred_username', keycloak.idTokenParsed.preferred_username);
+        localStorage.setItem('email', keycloak.idTokenParsed.email);
+        localStorage.setItem('name', keycloak.idTokenParsed.name);
+        localStorage.setItem('given_name', keycloak.idTokenParsed.given_name);
+        localStorage.setItem('family_name', keycloak.idTokenParsed.family_name);
+        localStorage.setItem('user_roles', keycloak.tokenParsed.realm_access.roles);
+        localStorage.setItem('user_client_roles', Object.values(keycloak.tokenParsed.resource_access)[1].roles);
+    } else {
+        keycloak.loadUserProfile(function() {
+            console.log('Account Service');
+            localStorage.setItem('username', keycloak.profile.username);
+            localStorage.setItem('email', keycloak.profile.email);
+            localStorage.setItem('name', keycloak.profile.firstName + ' ' + keycloak.profile.lastName);
+            localStorage.setItem('firstName', keycloak.profile.firstName);
+            localStorage.setItem('lastName', keycloak.profile.lastName);
+        }, function() {
+            console.log('Failed to retrieve user details. Please enable claims or account role');
+        });
+    }
+  
+    window.setTimeout(refreshToken.bind(null, keycloak), ONE_MINUTE);
+  }).error(() => {
+    console.error(`Auth Fail`);
+  })
+}
+
+function refreshToken() {
+  keycloak.updateToken(70).success(refreshed => {
+    if (refreshed) {
+      successRefresh(refreshed);
+    } else {
+      warnRefresh();
+    }
+  }).error(errorRefresh);
+}
+
+function successRefresh(refreshed) {
+  console.debug(`Token refreshed ${refreshed}`);
+}
+
+function warnRefresh() {
+  console.warn(`Token not refreshed, valid for 
+  ${Math.round(keycloak.tokenParsed.exp + keycloak.timeSkew - new Date().getTime() / 1000)} seconds`);
+}
+
+function errorRefresh() {
+  console.error('Failed to refresh token');
+}
